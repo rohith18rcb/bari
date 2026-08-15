@@ -1,7 +1,7 @@
 services:
   - type: web
     name: bari
-    runtime: python
+    env: python
     plan: free
     region: singapore
     buildCommand: >-
@@ -11,7 +11,7 @@ services:
     healthCheckPath: /api/stats
     envVars:
       - key: PYTHON_VERSION
-        value: 3.12.7
+        value: "3.12.7"
       - key: MODEL_PATH
         value: ml/models/pothole_yolo_best.pt
       - key: DEVICE
@@ -29,7 +29,7 @@ services:
       - key: GPS_INTERPOLATION
         value: "true"
       - key: GEOCODER_USER_AGENT
-        value: bari-render-demo/1.0 (contact: example@example.com)
+        value: "bari-render-demo/1.0"
       - key: ZONE_BOUNDARY_GEOJSON
         value: data/bengaluru/zones.geojson
       - key: WARD_BOUNDARY_GEOJSON
