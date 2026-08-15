@@ -1,0 +1,23 @@
+{
+  "status": "EXECUTED",
+  "weights": "C:\\Users\\rohit\\.gemini\\antigravity\\scratch\\bari\\ml\\training\\runs\\pothole_yolo\\weights\\best.pt",
+  "dataset": "C:\\Users\\rohit\\.gemini\\antigravity\\scratch\\bari\\ml\\datasets\\processed\\data.yaml",
+  "split": "test",
+  "device": "cpu",
+  "num_images": null,
+  "metrics": {
+    "precision": 0.3527,
+    "recall": 0.2349,
+    "map50": 0.1776,
+    "map50_95": 0.0539,
+    "f1": 0.282
+  },
+  "inference_speed_ms": {
+    "preprocess": 4.006,
+    "inference": 146.493,
+    "postprocess": 8.14,
+    "total": 158.64
+  },
+  "fps_estimate": 6.3,
+  "plots_dir": "C:\\Users\\rohit\\.gemini\\antigravity\\scratch\\bari\\runs\\detect\\val"
+}

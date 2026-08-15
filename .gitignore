@@ -1,0 +1,45 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+.venv/
+venv/
+
+.env
+
+# Data (large / generated)
+data/input/*
+!data/input/.gitkeep
+data/output/*
+!data/output/.gitkeep
+data/evidence/*
+!data/evidence/.gitkeep
+data/bari.db
+*.db
+
+# ML
+ml/datasets/raw/*
+!ml/datasets/raw/.gitkeep
+ml/datasets/processed/*
+!ml/datasets/processed/.gitkeep
+runs/
+*.pt
+*.onnx
+!ml/export/*.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts / local tooling (regenerable, not source)
+BARI-Collector.apk
+BARI_Interview_Prep.pdf
+*_log.txt
+*_log[0-9]*.txt
+gh_auth_log*.txt
+
+# Stock pretrained weights (auto-downloaded by ultralytics on first use)
+yolov8n.pt

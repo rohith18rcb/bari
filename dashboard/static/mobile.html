@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>BARI Collector (Web)</title>
+<style>
+  :root {
+    --bg: #0e1117; --panel: #161b24; --panel-alt: #1c222e; --border: #2a3140;
+    --text: #e6e9ef; --text-dim: #94a0b4; --accent: #3ca7ff;
+    --high: #ff5c5c; --medium: #ffb454; --low: #ffe27a; --ok: #4ade80;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 18px; padding-bottom: 60px;
+  }
+  h1 { font-size: 22px; margin: 4px 0 2px; color: var(--accent); }
+  p.sub { margin: 0 0 20px; color: var(--text-dim); font-size: 13px; }
+  .btn {
+    display: block; width: 100%; padding: 16px; margin-bottom: 12px;
+    background: var(--accent); color: #051018; border: none; border-radius: 10px;
+    font-size: 16px; font-weight: 700; text-align: center;
+  }
+  .btn:disabled { background: var(--panel-alt); color: var(--text-dim); }
+  .btn.secondary { background: var(--panel-alt); color: var(--text); border: 1px solid var(--border); }
+  .btn.danger { background: var(--high); color: #250000; }
+  input[type=file] { display: none; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px; margin-bottom: 14px; font-size: 13px;
+  }
+  .panel .label { color: var(--text-dim); text-transform: uppercase; font-size: 11px; margin-bottom: 6px; }
+  .log { max-height: 260px; overflow-y: auto; }
+  .log-entry { padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .log-entry:last-child { border-bottom: none; }
+  .tag { display: inline-block; padding: 2px 7px; border-radius: 5px; font-weight: 700; font-size: 11px; }
+  .tag-HIGH { background: rgba(255,92,92,0.15); color: var(--high); }
+  .tag-MEDIUM { background: rgba(255,180,84,0.15); color: var(--medium); }
+  .tag-LOW { background: rgba(255,226,122,0.15); color: var(--low); }
+  .tag-none { background: rgba(148,160,180,0.15); color: var(--text-dim); }
+  .status-row { display: flex; justify-content: space-between; padding: 3px 0; }
+  .warn { background: rgba(255,180,84,0.12); border: 1px solid var(--medium); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; color: var(--medium); margin-bottom: 14px; }
+</style>
+</head>
+<body>
+
+<h1>BARI Collector</h1>
+<p class="sub">Web capture — take a geotagged road photo, send it straight to your laptop's pipeline.</p>
+
+<div id="geo-warning" class="warn" style="display:none;">
+  Location isn't available over a plain HTTP address on this browser yet.
+  On Android Chrome: open <code>chrome://flags/#unsafely-treat-insecure-origin-as-secure</code>,
+  add this page's address, then relaunch Chrome and reload this page.
+</div>
+
+<button id="btnStart" class="btn">Start ride</button>
+<button id="btnStop" class="btn danger" style="display:none;">Stop ride</button>
+<button id="btnCapture" class="btn secondary" disabled>📷 Capture pothole photo</button>
+<input type="file" id="fileInput" accept="image/*" capture="environment">
+
+<div class="panel">
+  <div class="label">Status</div>
+  <div class="status-row"><span>Ride</span><span id="stRiding">not started</span></div>
+  <div class="status-row"><span>Session</span><span id="stSession">—</span></div>
+  <div class="status-row"><span>GPS fix</span><span id="stGps">waiting…</span></div>
+  <div class="status-row"><span>Captured this ride</span><span id="stCount">0</span></div>
+</div>
+
+<div class="panel">
+  <div class="label">Capture log</div>
+  <div id="log" class="log"><div class="log-entry" style="color:var(--text-dim)">No captures yet.</div></div>
+</div>
+
+<script>
+const state = {
+  sessionId: null,
+  serverBase: "", // same-origin: this page is served by the same FastAPI app
+  count: 0,
+  trace: [], // {timestamp, latitude, longitude, accuracy, speed, bearing}
+  lastPosition: null,
+};
+
+function deviceId() {
+  let id = localStorage.getItem("bari_device_id");
+  if (!id) {
+    id = "web-" + Math.random().toString(16).slice(2, 10);
+    localStorage.setItem("bari_device_id", id);
+  }
+  return id;
+}
+
+function isoNow() {
+  return new Date().toISOString();
+}
+
+function setStatus() {
+  document.getElementById("stRiding").textContent = state.sessionId ? "recording" : "not started";
+  document.getElementById("stSession").textContent = state.sessionId || "—";
+  document.getElementById("stCount").textContent = state.count;
+}
+
+function watchGps() {
+  if (!("geolocation" in navigator)) {
+    document.getElementById("geo-warning").style.display = "block";
+    document.getElementById("stGps").textContent = "unsupported";
+    return;
+  }
+  navigator.geolocation.watchPosition(
+    (pos) => {
+      state.lastPosition = pos;
+      document.getElementById("geo-warning").style.display = "none";
+      document.getElementById("stGps").textContent =
+        `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)} (±${Math.round(pos.coords.accuracy)}m)`;
+      document.getElementById("btnCapture").disabled = !state.sessionId;
+      if (state.sessionId) {
+        state.trace.push({
+          timestamp: isoNow(), latitude: pos.coords.latitude, longitude: pos.coords.longitude,
+          accuracy: pos.coords.accuracy || 0, speed: pos.coords.speed || 0, bearing: pos.coords.heading || 0,
+        });
+      }
+    },
+    (err) => {
+      document.getElementById("geo-warning").style.display = "block";
+      document.getElementById("stGps").textContent = "denied/unavailable";
+    },
+    { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 },
+  );
+}
+
+function addLogEntry(text, tag) {
+  const log = document.getElementById("log");
+  if (log.children.length === 1 && log.children[0].textContent === "No captures yet.") log.innerHTML = "";
+  const entry = document.createElement("div");
+  entry.className = "log-entry";
+  const tagClass = tag ? `tag-${tag}` : "tag-none";
+  entry.innerHTML = `<span class="tag ${tagClass}">${tag || "NO DETECTION"}</span> ${text}`;
+  log.prepend(entry);
+}
+
+async function startRide() {
+  try {
+    const form = new FormData();
+    form.append("device_id", deviceId());
+    const resp = await fetch(`${state.serverBase}/api/mobile/session/start`, { method: "POST", body: form });
+    const json = await resp.json();
+    state.sessionId = json.session_id;
+    state.count = 0;
+    state.trace = [];
+    setStatus();
+    document.getElementById("btnStart").style.display = "none";
+    document.getElementById("btnStop").style.display = "block";
+    document.getElementById("btnCapture").disabled = false;
+  } catch (e) {
+    alert("Could not reach the server. Check you're on the same WiFi as the laptop, and the address is correct.");
+  }
+}
+
+/** Wraps getCurrentPosition in a promise with its own timeout, used as a
+ * fresh-fix fallback when the continuous watchPosition() hasn't produced
+ * one yet (e.g. permission was just granted, or the first fix is slow). */
+function getFreshLocation(timeoutMs) {
+  return new Promise((resolve, reject) => {
+    if (!("geolocation" in navigator)) { reject(new Error("no geolocation API")); return; }
+    navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 5000 });
+  });
+}
+
+async function stopRide() {
+  const sessionId = state.sessionId;
+  document.getElementById("btnStart").style.display = "block";
+  document.getElementById("btnStop").style.display = "none";
+  document.getElementById("btnCapture").disabled = true;
+  state.sessionId = null;
+  setStatus();
+
+  if (!sessionId) return;
+  const header = "timestamp,latitude,longitude,accuracy,speed,bearing\n";
+  const rows = state.trace.map(p => `${p.timestamp},${p.latitude},${p.longitude},${p.accuracy},${p.speed},${p.bearing}`).join("\n");
+  const csvBlob = new Blob([header + rows + "\n"], { type: "text/csv" });
+  const form = new FormData();
+  form.append("gps_trace", csvBlob, "trace.csv");
+  try {
+    await fetch(`${state.serverBase}/api/mobile/session/${sessionId}/end`, { method: "POST", body: form });
+  } catch (e) { /* best-effort */ }
+}
+
+async function capturePhoto(file) {
+  if (!state.sessionId) {
+    alert("Start a ride first, then capture.");
+    return;
+  }
+
+  let pos = state.lastPosition;
+  if (!pos) {
+    addLogEntry("Getting GPS fix…", null);
+    try {
+      pos = await getFreshLocation(8000);
+      state.lastPosition = pos;
+      document.getElementById("stGps").textContent =
+        `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)} (±${Math.round(pos.coords.accuracy)}m)`;
+    } catch (e) {
+      document.getElementById("log").removeChild(document.getElementById("log").firstChild);
+      alert(
+        "No GPS fix available, so this photo can't be geotagged.\n\n" +
+        "On Android Chrome, location is blocked on plain http:// addresses by default. Fix: open " +
+        "chrome://flags/#unsafely-treat-insecure-origin-as-secure, add this page's exact address " +
+        "(http://" + location.host + "), set it to Enabled, relaunch Chrome, reload this page, and allow " +
+        "location when prompted.",
+      );
+      return;
+    }
+    document.getElementById("log").removeChild(document.getElementById("log").firstChild);
+  }
+
+  const form = new FormData();
+  form.append("file", file, "capture.jpg");
+  form.append("timestamp", isoNow());
+  form.append("latitude", pos.coords.latitude);
+  form.append("longitude", pos.coords.longitude);
+  form.append("accuracy", pos.coords.accuracy || 0);
+  form.append("speed", pos.coords.speed || 0);
+  form.append("bearing", pos.coords.heading || 0);
+
+  addLogEntry("Uploading…", null);
+  try {
+    const resp = await fetch(`${state.serverBase}/api/mobile/session/${state.sessionId}/photo`, { method: "POST", body: form });
+    const json = await resp.json();
+    state.count++;
+    setStatus();
+    const log = document.getElementById("log");
+    log.removeChild(log.firstChild); // remove the "Uploading…" placeholder
+    if (json.detected) {
+      addLogEntry(`${json.pothole_id} — ${(json.confidence * 100).toFixed(0)}% confidence, ward: ${json.ward}, ${json.duplicate_status}`, json.severity);
+    } else {
+      addLogEntry("No pothole detected in this photo.", null);
+    }
+  } catch (e) {
+    const log = document.getElementById("log");
+    log.removeChild(log.firstChild);
+    addLogEntry("Upload failed — will not retry automatically on the web version. Check connection and try again.", null);
+  }
+}
+
+document.getElementById("btnStart").addEventListener("click", startRide);
+document.getElementById("btnStop").addEventListener("click", stopRide);
+document.getElementById("btnCapture").addEventListener("click", () => document.getElementById("fileInput").click());
+document.getElementById("fileInput").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (file) capturePhoto(file);
+  e.target.value = "";
+});
+
+setStatus();
+watchGps();
+</script>
+</body>
+</html>

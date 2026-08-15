@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">BARI Collector</string>
+    <string name="notification_channel_name">Pothole ride recording</string>
+    <string name="notification_title">BARI is recording a ride</string>
+    <string name="notification_text">Capturing geotagged road photos in the background</string>
+</resources>

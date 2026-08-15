@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BARI — Bengaluru AI Road Intelligence</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">BARI</span>
+    <div class="brand-text">
+      <h1>Bengaluru AI Road Intelligence</h1>
+      <p>AI-powered pothole detection and road condition mapping</p>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <button id="btn-export-csv" class="btn">Export CSV</button>
+    <button id="btn-export-json" class="btn">Export JSON</button>
+  </div>
+</header>
+
+<section class="stats-grid" id="stats-grid">
+  <!-- populated by JS -->
+</section>
+
+<main class="main-grid">
+  <section class="panel filters-panel">
+    <h2>Filters</h2>
+    <div class="filter-group">
+      <label for="f-start-date">From</label>
+      <input type="date" id="f-start-date">
+    </div>
+    <div class="filter-group">
+      <label for="f-end-date">To</label>
+      <input type="date" id="f-end-date">
+    </div>
+    <div class="filter-group">
+      <label for="f-zone">Zone</label>
+      <select id="f-zone"><option value="">All</option></select>
+    </div>
+    <div class="filter-group">
+      <label for="f-ward">Ward</label>
+      <select id="f-ward"><option value="">All</option></select>
+    </div>
+    <div class="filter-group">
+      <label for="f-locality">Locality</label>
+      <select id="f-locality"><option value="">All</option></select>
+    </div>
+    <div class="filter-group">
+      <label for="f-severity">Severity</label>
+      <select id="f-severity">
+        <option value="">All</option>
+        <option value="HIGH">High</option>
+        <option value="MEDIUM">Medium</option>
+        <option value="LOW">Low</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label for="f-session">Session</label>
+      <select id="f-session"><option value="">All</option></select>
+    </div>
+    <div class="filter-group">
+      <label for="f-confidence">Min. confidence: <span id="f-confidence-val">0.0</span></label>
+      <input type="range" id="f-confidence" min="0" max="1" step="0.05" value="0">
+    </div>
+    <button id="btn-apply-filters" class="btn btn-primary">Apply filters</button>
+    <button id="btn-reset-filters" class="btn">Reset</button>
+  </section>
+
+  <section class="panel map-panel">
+    <h2>Pothole Map</h2>
+    <div id="map"></div>
+    <div class="legend">
+      <span><i class="dot dot-high"></i> High</span>
+      <span><i class="dot dot-medium"></i> Medium</span>
+      <span><i class="dot dot-low"></i> Low</span>
+    </div>
+  </section>
+
+  <section class="panel analytics-panel">
+    <h2>Analytics</h2>
+    <div class="charts-grid">
+      <div class="chart-box"><h3>By Severity</h3><canvas id="chart-severity"></canvas></div>
+      <div class="chart-box"><h3>By Zone</h3><canvas id="chart-zone"></canvas></div>
+      <div class="chart-box"><h3>By Ward (top 10)</h3><canvas id="chart-ward"></canvas></div>
+      <div class="chart-box"><h3>By Locality (top 10)</h3><canvas id="chart-locality"></canvas></div>
+      <div class="chart-box chart-wide"><h3>Detections Over Time</h3><canvas id="chart-time"></canvas></div>
+    </div>
+  </section>
+
+  <section class="panel table-panel">
+    <h2>Detections <span id="table-count"></span></h2>
+    <div class="table-scroll">
+      <table id="detections-table">
+        <thead>
+          <tr>
+            <th>ID</th><th>Timestamp</th><th>Area</th><th>Zone</th><th>Ward</th>
+            <th>Severity</th><th>Confidence</th><th>GPS</th><th>Session</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="detections-tbody"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<div id="detail-modal" class="modal hidden">
+  <div class="modal-content">
+    <button id="modal-close" class="modal-close">&times;</button>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<footer class="footer">
+  BARI V1 — laptop/video-based pipeline. Severity is an estimated heuristic, not a certified measurement.
+  GPS accuracy varies by device. Android on-device deployment is a future roadmap item, not yet implemented.
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="/js/main.js"></script>
+</body>
+</html>
