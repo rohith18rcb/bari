@@ -29,6 +29,7 @@ from core.location import LocationEngine
 from db import crud
 from db.crud import PersistentGeocodeCache
 from db.database import SessionLocal, get_session
+from db.models import SessionRecord
 
 logger = logging.getLogger("bari.ingest")
 router = APIRouter(prefix="/api/mobile", tags=["mobile"])
@@ -61,14 +62,40 @@ def _location_engine() -> LocationEngine:
 
 
 @router.post("/session/start")
-def start_session(device_id: str = Form(...)):
-    start_time = datetime.now(IST)
-    session_id = generate_session_id(start_time)
+def start_session(
+    device_id: str = Form(...),
+    session_id: Optional[str] = Form(None),
+    start_time: Optional[str] = Form(None),
+):
+    """Creates a session record. Idempotent when ``session_id`` is supplied:
+    the app generates its own session id locally (so a ride can start
+    immediately with no network), then calls this endpoint in the
+    background to sync it — possibly much later, once WiFi is available.
+    Calling it again for an id that already exists just confirms it rather
+    than erroring, so retries from an unreliable connection are safe.
+    ``start_time`` (ISO 8601) lets the recorded start reflect when the ride
+    actually began on the phone, not whenever this sync call happened to
+    succeed.
+    """
     with SessionLocal() as db:
-        crud.create_session(db, session_id, start_time, video_source=f"[MOBILE] {device_id}", gps_source="[MOBILE] on-device GPS per photo", is_demo=False)
+        if session_id is not None:
+            existing = db.get(SessionRecord, session_id)
+            if existing is not None:
+                return {"session_id": session_id}
+
+        ts = datetime.now(IST)
+        if start_time:
+            try:
+                parsed = datetime.fromisoformat(start_time)
+                ts = parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=IST)
+            except ValueError:
+                pass
+
+        sid = session_id or generate_session_id(ts)
+        crud.create_session(db, sid, ts, video_source=f"[MOBILE] {device_id}", gps_source="[MOBILE] on-device GPS per photo", is_demo=False)
         db.commit()
-    logger.info("Mobile session started: %s (device=%s)", session_id, device_id)
-    return {"session_id": session_id}
+    logger.info("Mobile session started: %s (device=%s)", sid, device_id)
+    return {"session_id": sid}
 
 
 @router.post("/session/{session_id}/photo")
@@ -103,7 +130,6 @@ async def upload_photo(
         raise HTTPException(status_code=400, detail="timestamp must be ISO 8601")
 
     from core.mobile_ingest import process_mobile_photo
-    from db.models import SessionRecord
 
     with SessionLocal() as db:
         if db.get(SessionRecord, session_id) is None:

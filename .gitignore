@@ -38,8 +38,11 @@ runs/
 Thumbs.db
 
 # Build artifacts / local tooling (regenerable, not source)
-BARI-Collector.apk
+/BARI-Collector.apk
 BARI_Interview_Prep.pdf
+# dashboard/static/BARI-Collector.apk is a deliberate exception (see
+# ml/models/pothole_yolo_best.pt above for the same pattern) — it's what
+# both the local dashboard and the Render deployment serve for download.
 *_log.txt
 *_log[0-9]*.txt
 gh_auth_log*.txt

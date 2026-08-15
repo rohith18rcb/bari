@@ -22,10 +22,42 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:layout_marginBottom="24dp"
+            android:layout_marginBottom="16dp"
             android:text="Background road-photo + GPS collector for BARI"
             android:textColor="@color/text_dim"
             android:textSize="13sp" />
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="260dp"
+            android:layout_marginBottom="6dp"
+            android:background="@color/panel">
+
+            <androidx.camera.view.PreviewView
+                android:id="@+id/cameraPreview"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <TextView
+                android:id="@+id/textPreviewHint"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:padding="16dp"
+                android:text="Camera preview appears here once a ride starts"
+                android:textAlignment="center"
+                android:textColor="@color/text_dim"
+                android:textSize="12sp" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/textLastDetection"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="20dp"
+            android:text="No detections yet this ride. Results appear here after each automatic capture (every ~10m moved or ~8s) — this is not frame-by-frame live detection; see docs/android_deployment.md."
+            android:textColor="@color/text_dim"
+            android:textSize="11sp" />
 
         <TextView
             android:layout_width="wrap_content"

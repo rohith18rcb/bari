@@ -19,10 +19,16 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 
 /**
- * Uploads every queued photo (across all sessions with pending files) to the
- * laptop's ingest API. Deletes local copies on confirmed success; anything
- * that fails (server unreachable, photo rejected) stays queued and is
- * retried on the next run — nothing is ever silently dropped on the phone.
+ * Syncs every locally-queued ride (across sessions that started fully
+ * offline, or just haven't found WiFi yet) to the laptop's ingest API, in
+ * order: (1) ensure the session exists server-side — idempotent, safe to
+ * call again even if it already synced; (2) upload every queued photo,
+ * deleting local copies on confirmed success; (3) if the ride was stopped
+ * (marked "ended" locally) and every photo is now uploaded, sync the end
+ * (distance/duration) and clean up the now-empty local queue directory.
+ * Anything that fails at any step (server unreachable, photo rejected)
+ * stays queued and is retried on the next run — nothing is ever silently
+ * dropped from the phone until the server has confirmed it.
  */
 class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
@@ -38,7 +44,14 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         var uploadedCount = 0
 
         for (sessionId in CaptureQueue.listAllPendingSessions(applicationContext)) {
-            if (sessionId.startsWith("OFFLINE-")) continue // no server session was ever created for this ride
+            val meta = CaptureQueue.readSessionMeta(applicationContext, sessionId)
+            val deviceId = meta?.deviceId ?: prefs.deviceId
+            val synced = client.startSession(deviceId, sessionId, meta?.startTime) != null
+            if (!synced) {
+                anyFailure = true
+                continue // can't upload photos against a session the server doesn't know about yet
+            }
+
             for (photo in CaptureQueue.listPending(applicationContext, sessionId)) {
                 val result = client.uploadPhoto(
                     sessionId, photo.jpegFile, photo.meta.timestamp,
@@ -48,6 +61,17 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                 if (result.ok) {
                     CaptureQueue.deletePending(applicationContext, sessionId, photo.id)
                     uploadedCount++
+                    DetectionEvents.emit(result)
+                } else {
+                    anyFailure = true
+                }
+            }
+
+            val stillPending = CaptureQueue.listPending(applicationContext, sessionId).isNotEmpty()
+            if (CaptureQueue.isEnded(applicationContext, sessionId) && !stillPending) {
+                val trace = CaptureQueue.gpsTraceFile(applicationContext, sessionId)
+                if (client.endSession(sessionId, trace)) {
+                    CaptureQueue.deleteSessionDir(applicationContext, sessionId)
                 } else {
                     anyFailure = true
                 }

@@ -48,12 +48,55 @@ data class PhotoMeta(
 
 data class PendingPhoto(val id: String, val jpegFile: File, val meta: PhotoMeta)
 
+/** Recorded once, locally, the moment a ride starts — so the server sync
+ * (which may happen much later, once WiFi is available) can report the
+ * ride's *real* start time rather than whenever the sync call succeeded. */
+data class SessionMeta(val startTime: String, val deviceId: String) {
+    fun toJson(): String = JSONObject().apply {
+        put("start_time", startTime)
+        put("device_id", deviceId)
+    }.toString()
+
+    companion object {
+        fun fromJson(json: String): SessionMeta {
+            val o = JSONObject(json)
+            return SessionMeta(o.getString("start_time"), o.getString("device_id"))
+        }
+    }
+}
+
 object CaptureQueue {
 
     private fun sessionDir(context: Context, sessionId: String): File {
         val dir = File(context.getExternalFilesDir(null), "pending/$sessionId")
         dir.mkdirs()
         return dir
+    }
+
+    // --- Session lifecycle (works fully offline; synced to the server later) ---
+
+    fun writeSessionMeta(context: Context, sessionId: String, meta: SessionMeta) {
+        File(sessionDir(context, sessionId), "session_meta.json").writeText(meta.toJson())
+    }
+
+    fun readSessionMeta(context: Context, sessionId: String): SessionMeta? {
+        val f = File(sessionDir(context, sessionId), "session_meta.json")
+        if (!f.exists()) return null
+        return try { SessionMeta.fromJson(f.readText()) } catch (e: Exception) { null }
+    }
+
+    fun markEnded(context: Context, sessionId: String) {
+        File(sessionDir(context, sessionId), "ended.marker").writeText("")
+    }
+
+    fun isEnded(context: Context, sessionId: String): Boolean =
+        File(sessionDir(context, sessionId), "ended.marker").exists()
+
+    /** Called once a session has been fully synced (started, all photos
+     * uploaded, and ended) server-side — removes the now-empty local queue
+     * directory for it. */
+    fun deleteSessionDir(context: Context, sessionId: String) {
+        sessionDir(context, sessionId).deleteRecursively()
     }
 
     fun enqueuePhoto(context: Context, sessionId: String, jpegBytes: ByteArray, meta: PhotoMeta): String {

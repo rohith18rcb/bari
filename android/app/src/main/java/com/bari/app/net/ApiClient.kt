@@ -24,20 +24,41 @@ class ApiClient(private val baseUrl: String) {
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    /** Returns the new session_id, or null on failure. */
-    fun startSession(deviceId: String): String? {
-        val body = MultipartBody.Builder().setType(MultipartBody.FORM)
+    /**
+     * Creates (or, if [sessionId] already exists server-side, just confirms)
+     * a session. Returns the session_id, or null on failure — including no
+     * network, which this must never throw for: the app generates its own
+     * session id locally and starts capturing immediately regardless of
+     * connectivity, then relies on this call succeeding *eventually* (retried
+     * by the upload worker) to sync it. [startTimeIso], when given, is
+     * recorded as the ride's real start time rather than whenever this sync
+     * call happened to succeed.
+     */
+    fun startSession(deviceId: String, sessionId: String? = null, startTimeIso: String? = null): String? {
+        val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("device_id", deviceId)
-            .build()
-        val request = Request.Builder().url("$baseUrl/api/mobile/session/start").post(body).build()
-        client.newCall(request).execute().use { resp ->
-            if (!resp.isSuccessful) return null
-            val json = JSONObject(resp.body?.string() ?: return null)
-            return json.optString("session_id", null.toString()).takeIf { it != "null" }
+        if (sessionId != null) builder.addFormDataPart("session_id", sessionId)
+        if (startTimeIso != null) builder.addFormDataPart("start_time", startTimeIso)
+        val request = Request.Builder().url("$baseUrl/api/mobile/session/start").post(builder.build()).build()
+        return try {
+            client.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) return null
+                val json = JSONObject(resp.body?.string() ?: return null)
+                json.optString("session_id", null.toString()).takeIf { it != "null" }
+            }
+        } catch (e: Exception) {
+            null
         }
     }
 
-    data class PhotoUploadResult(val ok: Boolean, val detected: Boolean, val potholeId: String?)
+    data class PhotoUploadResult(
+        val ok: Boolean,
+        val detected: Boolean,
+        val potholeId: String? = null,
+        val confidence: Float? = null,
+        val severity: String? = null,
+        val ward: String? = null,
+    )
 
     fun uploadPhoto(
         sessionId: String, jpegFile: File, timestamp: String,
@@ -55,12 +76,19 @@ class ApiClient(private val baseUrl: String) {
         val request = Request.Builder().url("$baseUrl/api/mobile/session/$sessionId/photo").post(body).build()
         return try {
             client.newCall(request).execute().use { resp ->
-                if (!resp.isSuccessful) return PhotoUploadResult(false, false, null)
+                if (!resp.isSuccessful) return PhotoUploadResult(ok = false, detected = false)
                 val json = JSONObject(resp.body?.string() ?: "{}")
-                PhotoUploadResult(true, json.optBoolean("detected", false), json.optString("pothole_id", null.toString()).takeIf { it != "null" })
+                PhotoUploadResult(
+                    ok = true,
+                    detected = json.optBoolean("detected", false),
+                    potholeId = json.optString("pothole_id", null.toString()).takeIf { it != "null" },
+                    confidence = if (json.has("confidence") && !json.isNull("confidence")) json.optDouble("confidence").toFloat() else null,
+                    severity = json.optString("severity", null.toString()).takeIf { it != "null" },
+                    ward = json.optString("ward", null.toString()).takeIf { it != "null" },
+                )
             }
         } catch (e: Exception) {
-            PhotoUploadResult(false, false, null)
+            PhotoUploadResult(ok = false, detected = false)
         }
     }
 

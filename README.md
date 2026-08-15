@@ -7,25 +7,15 @@ demonstrable computer vision / ML engineering portfolio project.
 
 | | |
 |---|---|
-| 🌐 **Live dashboard** | **[substance-messages-subsidiary-red.trycloudflare.com](https://substance-messages-subsidiary-red.trycloudflare.com)** |
-| 📱 **Download the Android app** | **[.../BARI-Collector.apk](https://substance-messages-subsidiary-red.trycloudflare.com/BARI-Collector.apk)** (sideload, no Play Store — allow "install unknown apps" when prompted) |
+| 🌐 **Live dashboard (permanent)** | **[bari-7q3p.onrender.com](https://bari-7q3p.onrender.com)** |
+| 📱 **Download the Android app** | **[.../BARI-Collector.apk](https://bari-7q3p.onrender.com/BARI-Collector.apk)** (sideload, no Play Store — allow "install unknown apps" when prompted) |
 
-> ⚠️ Both links point to a **free Cloudflare Quick Tunnel** into the FastAPI
-> server running on my laptop — there's no paid hosting involved. That means
-> the URL **only works while my machine and the tunnel are running**, and it
-> **changes** every time the tunnel restarts. If the link above is dead,
-> that's why — the code and setup instructions below still work on your own
-> machine regardless. No install needed to browse the dashboard itself; the
-> APK is only needed if you want to *contribute* road-photo data from your
-> own phone.
-
-Want a URL that doesn't depend on my laptop being on? Deploy your own free,
-permanent copy on Render:
-
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/rohith18rcb/bari)
-
-See [`docs/deployment.md`](docs/deployment.md) for what that involves (free
-tier, no card required, a few minutes to first deploy).
+> This runs on Render's free tier — it sleeps after 15 minutes idle and
+> takes ~30-50s to wake up on the first request after a quiet period; give
+> it a moment if it looks unresponsive. It's also independent of my laptop
+> (see [`docs/deployment.md`](docs/deployment.md) for how to deploy your
+> own copy the same way, or run it locally with a free
+> [Cloudflare tunnel](#13a-public-deployment-free) instead).
 
 > **Honest scope note:** this does not detect every pothole in Bengaluru,
 > GPS accuracy is only as good as the input device, and severity is an

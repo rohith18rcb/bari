@@ -7,13 +7,17 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.location.Location
+import android.os.Binder
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.IBinder
 import android.os.Looper
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.Preview
+import androidx.camera.core.UseCase
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
@@ -51,8 +55,32 @@ class CaptureService : LifecycleService() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private var cameraProvider: ProcessCameraProvider? = null
     private var imageCapture: ImageCapture? = null
+    private var preview: Preview? = null
     private lateinit var cameraExecutorThread: HandlerThread
     private lateinit var cameraExecutor: Handler
+
+    /** Lets a bound, foregrounded MainActivity show what the capture camera
+     * is currently seeing. Purely a UI convenience — capture keeps running
+     * via [imageCapture] whether or not anything is bound to watch it. */
+    inner class LocalBinder : Binder() {
+        fun getService(): CaptureService = this@CaptureService
+    }
+    private val binder = LocalBinder()
+
+    override fun onBind(intent: Intent): IBinder {
+        super.onBind(intent)
+        return binder
+    }
+
+    fun attachPreview(surfaceProvider: Preview.SurfaceProvider) {
+        preview = Preview.Builder().build().also { it.setSurfaceProvider(surfaceProvider) }
+        rebindCamera()
+    }
+
+    fun detachPreview() {
+        preview = null
+        rebindCamera()
+    }
 
     private var sessionId: String? = null
     private var lastCaptureLocation: Location? = null
@@ -156,13 +184,26 @@ class CaptureService : LifecycleService() {
             imageCapture = ImageCapture.Builder()
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                 .build()
-            try {
-                cameraProvider?.unbindAll()
-                cameraProvider?.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, imageCapture)
-            } catch (e: Exception) {
-                stopSelf()
-            }
+            if (!rebindCamera()) stopSelf() // initial bind failing is fatal — no capture is possible at all
         }, mainExecutor())
+    }
+
+    /** (Re)binds whichever use cases currently apply — capture always,
+     * preview only while a MainActivity is bound and watching. Called both
+     * on initial setup and whenever [attachPreview]/[detachPreview] change
+     * what should be bound. Returns false if the bind failed. */
+    private fun rebindCamera(): Boolean {
+        val provider = cameraProvider ?: return false
+        val capture = imageCapture ?: return false
+        return try {
+            provider.unbindAll()
+            val useCases = mutableListOf<UseCase>(capture)
+            preview?.let { useCases.add(it) }
+            provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, *useCases.toTypedArray())
+            true
+        } catch (e: Exception) {
+            false
+        }
     }
 
     private fun mainExecutor() = androidx.core.content.ContextCompat.getMainExecutor(this)
