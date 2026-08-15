@@ -7,8 +7,8 @@ demonstrable computer vision / ML engineering portfolio project.
 
 | | |
 |---|---|
-| 🌐 **Live dashboard** | **[ann-mask-western-mia.trycloudflare.com](https://ann-mask-western-mia.trycloudflare.com)** |
-| 📱 **Download the Android app** | **[.../BARI-Collector.apk](https://ann-mask-western-mia.trycloudflare.com/BARI-Collector.apk)** (sideload, no Play Store — allow "install unknown apps" when prompted) |
+| 🌐 **Live dashboard** | **[substance-messages-subsidiary-red.trycloudflare.com](https://substance-messages-subsidiary-red.trycloudflare.com)** |
+| 📱 **Download the Android app** | **[.../BARI-Collector.apk](https://substance-messages-subsidiary-red.trycloudflare.com/BARI-Collector.apk)** (sideload, no Play Store — allow "install unknown apps" when prompted) |
 
 > ⚠️ Both links point to a **free Cloudflare Quick Tunnel** into the FastAPI
 > server running on my laptop — there's no paid hosting involved. That means
