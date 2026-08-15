@@ -29,6 +29,9 @@ runs/
 *.pt
 *.onnx
 !ml/export/*.md
+# Deployed model weights (committed deliberately — needed for the live
+# Render deployment to actually run detection; see docs/deployment.md)
+!ml/models/pothole_yolo_best.pt
 
 # OS
 .DS_Store

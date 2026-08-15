@@ -19,6 +19,14 @@ demonstrable computer vision / ML engineering portfolio project.
 > APK is only needed if you want to *contribute* road-photo data from your
 > own phone.
 
+Want a URL that doesn't depend on my laptop being on? Deploy your own free,
+permanent copy on Render:
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/rohith18rcb/bari)
+
+See [`docs/deployment.md`](docs/deployment.md) for what that involves (free
+tier, no card required, a few minutes to first deploy).
+
 > **Honest scope note:** this does not detect every pothole in Bengaluru,
 > GPS accuracy is only as good as the input device, and severity is an
 > estimated heuristic (not a certified road-engineering measurement).

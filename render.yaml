@@ -1,0 +1,46 @@
+services:
+  - type: web
+    name: bari
+    runtime: python
+    plan: free
+    region: singapore
+    buildCommand: >-
+      pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu &&
+      pip install --no-cache-dir -r requirements.txt
+    startCommand: uvicorn dashboard.app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/stats
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: MODEL_PATH
+        value: ml/models/pothole_yolo_best.pt
+      - key: DEVICE
+        value: cpu
+      - key: CONFIDENCE_THRESHOLD
+        value: "0.35"
+      - key: IOU_THRESHOLD
+        value: "0.45"
+      - key: MIN_TRACK_FRAMES
+        value: "3"
+      - key: DUPLICATE_DISTANCE_METERS
+        value: "8"
+      - key: DUPLICATE_TIME_WINDOW_HOURS
+        value: "720"
+      - key: GPS_INTERPOLATION
+        value: "true"
+      - key: GEOCODER_USER_AGENT
+        value: bari-render-demo/1.0 (contact: example@example.com)
+      - key: ZONE_BOUNDARY_GEOJSON
+        value: data/bengaluru/zones.geojson
+      - key: WARD_BOUNDARY_GEOJSON
+        value: data/bengaluru/wards.geojson
+      - key: DATABASE_PATH
+        value: data/bari.db
+      - key: EVIDENCE_PATH
+        value: data/evidence
+      - key: OUTPUT_PATH
+        value: data/output
+      - key: TIMEZONE
+        value: Asia/Kolkata
+      - key: DASHBOARD_HOST
+        value: 0.0.0.0
