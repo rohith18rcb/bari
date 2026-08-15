@@ -1,10 +1,20 @@
-# Android Deployment (Future — Not Implemented in V1)
+# Android Deployment
 
-BARI V1 runs on a laptop against a pre-recorded video file + GPS CSV. This
-document explains how the same core pipeline could later run on-device on
-Android — **no Android code exists in this repository**; this is a design
-plan for Phase 3 of the roadmap (see README "Future Roadmap"), so
-architectural choices elsewhere in the project don't have to be redone.
+**Current state:** a real native Android app exists in `android/` — see the
+[Live demo](../README.md#live-demo) link in the main README to install it,
+or `README.md` section 9a for what it does. It captures geotagged road
+photos in the background (CameraX + a foreground Service +
+FusedLocationProviderClient) and uploads them to this backend over WiFi via
+the `/api/mobile/*` endpoints (`dashboard/ingest.py`). Built and verified
+end-to-end on an Android emulator: permissions flow, background capture,
+local offline queueing, WorkManager upload, and session lifecycle all
+confirmed working against the real backend.
+
+**What this document is about:** the app above captures and uploads —
+detection itself still happens server-side (the backend runs YOLO on the
+uploaded photo). This document is the concrete plan for the next step:
+moving inference itself onto the phone, so it works without a live
+connection to a laptop at all. That part is **not yet built**.
 
 ## What changes, what doesn't
 
@@ -70,12 +80,16 @@ paths. An Android client only has to produce the same shaped inputs:
 ## Explicitly not solved yet
 
 - Real-time on-device inference performance has not been benchmarked on any
-  Android hardware — only PyTorch-vs-ONNXRuntime-on-CPU is benchmarked in
-  V1 (`ml/export/export_onnx.py`).
-- No mobile UI, permissions flow, background-service design, or battery
-  budget has been designed.
-- No server-side sync API exists yet — `sync_queue` is schema-only,
-  unused by any endpoint in V1.
+  Android hardware — only PyTorch-vs-ONNXRuntime-on-CPU is benchmarked so
+  far (`ml/export/export_onnx.py`).
+- No on-device tracker or on-device GPS-sync port exists yet — the shipped
+  app uploads each photo individually and the backend runs the full
+  detection pipeline server-side.
+- No battery-usage budget has been measured for the background capture
+  service.
+- No server-side batch-sync API exists yet — `sync_queue` is schema-only,
+  unused by any endpoint currently.
 
-This document intentionally stops at "concrete plan," not "shipped code" —
-per project scope, Android is a Phase 3+ roadmap item.
+The capture-and-upload half of Android (permissions, background service,
+local queue, WiFi upload) is shipped and working. The on-device-inference
+half above is still a concrete plan, not shipped code.

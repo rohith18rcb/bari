@@ -122,7 +122,9 @@ executed runs, never invented.
 - No real Bengaluru dashcam footage was used in this build — the shipped
   demo video is a labeled synthetic composite (see `scripts/generate_demo_video.py`);
   the *pipeline itself* is fully real and works identically on genuine footage.
-- CPU-only inference in this build; no on-device (Android) deployment yet.
+- CPU-only inference in this build. A native Android app captures and
+  uploads real photos (shipped, verified end-to-end), but detection itself
+  still runs server-side — fully on-device inference is future work.
 
 ## Future improvements
 

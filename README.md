@@ -3,14 +3,32 @@
 AI pothole detection, GPS mapping, Bengaluru GIS, and analytics — built as a
 demonstrable computer vision / ML engineering portfolio project.
 
-> **Honest scope note:** this is a laptop/video-based V1 pipeline. It does
-> not detect every pothole in Bengaluru, GPS accuracy is only as good as the
-> input device, severity is an estimated heuristic (not a certified
-> road-engineering measurement), and there is no on-device Android app yet
-> (see [Future Roadmap](#future-roadmap)). What *is* real: the trained CV
-> model, the GPS synchronization math, the GIS ward resolution against real
-> BBMP boundaries, the SQLite database, and the dashboard — all runnable
-> end-to-end on real input.
+## Live demo
+
+| | |
+|---|---|
+| 🌐 **Live dashboard** | **[ann-mask-western-mia.trycloudflare.com](https://ann-mask-western-mia.trycloudflare.com)** |
+| 📱 **Download the Android app** | **[.../BARI-Collector.apk](https://ann-mask-western-mia.trycloudflare.com/BARI-Collector.apk)** (sideload, no Play Store — allow "install unknown apps" when prompted) |
+
+> ⚠️ Both links point to a **free Cloudflare Quick Tunnel** into the FastAPI
+> server running on my laptop — there's no paid hosting involved. That means
+> the URL **only works while my machine and the tunnel are running**, and it
+> **changes** every time the tunnel restarts. If the link above is dead,
+> that's why — the code and setup instructions below still work on your own
+> machine regardless. No install needed to browse the dashboard itself; the
+> APK is only needed if you want to *contribute* road-photo data from your
+> own phone.
+
+> **Honest scope note:** this does not detect every pothole in Bengaluru,
+> GPS accuracy is only as good as the input device, and severity is an
+> estimated heuristic (not a certified road-engineering measurement).
+> Detection itself still runs server-side (the phone apps capture and
+> upload; the FastAPI backend runs YOLO) — fully on-device inference is a
+> documented future step, not yet built. What *is* real and running today:
+> the trained CV model, GPS synchronization, GIS ward resolution against
+> real BBMP boundaries, a native Android capture app, a browser-based
+> capture page, the SQLite database, and a live dashboard — all exercised
+> end-to-end on real captured data, not just simulated demo data.
 
 ## 1. Project overview
 
@@ -45,7 +63,10 @@ Full diagrams and component breakdown: [`docs/architecture.md`](docs/architectur
 - CSV / JSON export (CLI + dashboard download buttons)
 - ONNX export + PyTorch-vs-ONNXRuntime benchmarking
 - Full demo mode (simulated GPS route + synthetic composite video from real dataset photos)
-- Automated test suite (62 tests) covering GPS sync, geo math, severity, DB, GIS, export, API, validation
+- **Native Android capture app** (Kotlin, CameraX, background foreground-service capture, offline queue + WiFi upload)
+- **Browser-based capture page** (no install — camera + GPS straight from a phone browser to the same backend API)
+- Free public hosting via Cloudflare Tunnel (no account needed for a quick tunnel)
+- Automated test suite (70+ tests) covering GPS sync, geo math, severity, DB, GIS, export, dashboard API, mobile ingest API, validation
 
 ## 5. ML pipeline
 
@@ -85,14 +106,23 @@ weights, training curves, PR curve, confusion matrix under
 python ml/evaluation/evaluate.py --split test
 ```
 
-**Actual metrics from this build** (held-out test split — see
+**Actual metrics from this build** (held-out test split, CPU — see
 `ml/evaluation/reports/evaluation_report.json`):
 
 ```
-[EVALUATION_METRICS_PLACEHOLDER]
+Precision:   0.353
+Recall:      0.235
+mAP@50:      0.178
+mAP@50-95:   0.054
+F1:          0.282
+Inference:   158.6 ms/image (~6.3 FPS on CPU)
 ```
 
-Metric definitions are in [`docs/model_deployment.md`](docs/model_deployment.md#evaluation).
+These are honestly modest — a 100-image training set and a CPU-limited
+training budget, not a bug. See
+[`docs/model_deployment.md`](docs/model_deployment.md#evaluation) for what
+each metric means and what would improve these numbers (more data, a larger
+backbone, GPU training, a longer schedule).
 
 ## 9. Video inference
 
@@ -103,6 +133,27 @@ python main.py --video data/input/ride01.mp4 --gps data/input/ride01.csv
 Runs the full pipeline: detection, tracking, event confirmation, GPS sync,
 location resolution, severity, duplicate check, evidence saving, DB writes,
 and produces an annotated output video at `data/output/<session_id>_annotated.mp4`.
+
+## 9a. Live phone capture: native app and browser page
+
+Two independent clients feed the same backend, for real-time capture instead
+of a pre-recorded video file:
+
+- **Native Android app** (`android/`) — Kotlin + CameraX + a foreground
+  Service, so it keeps capturing with the screen off / app backgrounded.
+  Captures on a distance-or-time trigger, queues locally, uploads over WiFi
+  via WorkManager (manual "Upload Now" or automatic periodic retry). Build
+  it yourself with `cd android && ./gradlew assembleDebug`, or grab the
+  pre-built APK from the [Live demo](#live-demo) link above.
+- **Browser capture page** (`dashboard/static/mobile.html`) — no install;
+  open it on any phone on the same network (`http://<your-ip>:8000/mobile.html`)
+  and it uses the phone's camera + the browser Geolocation API. Same backend
+  endpoints as the native app.
+
+Both talk to `dashboard/ingest.py`'s `/api/mobile/session/*` endpoints,
+which call the exact same detection → severity → GIS → duplicate-check →
+DB-write logic as the video pipeline (`core/mobile_ingest.py`) — no
+duplicated business logic between the two input paths.
 
 ## 10. GPS synchronization
 
@@ -132,11 +183,34 @@ python dashboard/app.py
 # open http://127.0.0.1:8000
 ```
 
-FastAPI JSON API (`dashboard/app.py`) + a Leaflet/Chart.js single-page
-frontend (`dashboard/static/`): live stats, filterable map (severity/zone/
-ward/locality/date/confidence/session), analytics charts, a detection
-table with an evidence-image detail view, and CSV/JSON export buttons.
-Demo-generated records are visibly tagged `DEMO` throughout.
+FastAPI JSON API (`dashboard/app.py` + `dashboard/ingest.py`) + a
+Leaflet/Chart.js single-page frontend (`dashboard/static/`): live stats,
+filterable map (severity/zone/ward/locality/date/confidence/session),
+analytics charts, a detection table with an evidence-image detail view, and
+CSV/JSON export buttons. The same server also hosts the phone capture page
+(`/mobile.html`) and the mobile ingest API used by the native Android app.
+
+To make it reachable from your phone (not just the laptop itself), set
+`DASHBOARD_HOST=0.0.0.0` in `.env` and use your machine's LAN IP —
+see [Public deployment](#13a-public-deployment-free) below for a
+no-account way to get a real public URL instead.
+
+## 13a. Public deployment (free)
+
+The live demo above runs via a free [Cloudflare Quick
+Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/) —
+no account, no signup:
+
+```bash
+# 1. download cloudflared (one-time), then:
+cloudflared tunnel --url http://localhost:8000
+```
+
+This prints a random `https://<name>.trycloudflare.com` URL that proxies to
+your locally-running dashboard. It's genuinely free but has real tradeoffs:
+the URL changes every restart, and it only works while your machine + the
+tunnel process stay up. For a stable subdomain, use a (still free) named
+Cloudflare Tunnel with a Cloudflare account instead.
 
 ## 14. Demo mode
 
@@ -152,8 +226,10 @@ real held-out test-split dataset photos with a Ken Burns pan/zoom
 as such in logs and DB), runs it through the real pipeline (`main.py
 --demo`), then adds extra simulated sessions (`scripts/generate_demo_data.py`)
 so the dashboard has enough data to be meaningfully explored. Every record
-this produces is flagged `is_demo=True` in the database and shown with a
-`DEMO` badge in the dashboard.
+this produces is flagged `is_demo=True` in the database (queryable/exportable)
+so it stays distinguishable from real captures even though the current
+dashboard UI displays them the same way. Once real data exists, clear demo
+records with `python scripts/clear_demo_data.py`.
 
 ## 15. Real ride workflow
 
@@ -175,10 +251,20 @@ python ml/export/export_onnx.py
 Exports to ONNX, reports model size (PyTorch vs ONNX) and benchmarks CPU
 inference latency for both. See `ml/export/export_report.json`.
 
-## 17. Future Android architecture
+## 17. Android — current state and what's still ahead
 
-Not implemented in V1. Full plan (what changes / what doesn't, concrete
-steps): [`docs/android_deployment.md`](docs/android_deployment.md).
+**Built and working today:** a native Kotlin app that captures geotagged
+road photos in the background and uploads them to this backend (see
+[section 9a](#9a-live-phone-capture-native-app-and-browser-page) above) — verified
+end-to-end on an emulator (permissions, background capture, local queueing,
+WiFi upload, session lifecycle) and installable on a real device from the
+[Live demo](#live-demo) link.
+
+**Not yet built:** fully *on-device* inference. The phone currently
+captures + uploads; detection still runs on this server. The concrete plan
+for moving YOLO inference itself onto the phone (ONNX Runtime Mobile,
+replacing the server round-trip) is documented in
+[`docs/android_deployment.md`](docs/android_deployment.md).
 
 ## 18. Installation
 
@@ -223,6 +309,8 @@ python dashboard/app.py
 | Export CSV | `python export_data.py --format csv` |
 | Export JSON | `python export_data.py --format json` |
 | Dashboard | `python dashboard/app.py` |
+| Build Android app | `cd android && ./gradlew assembleDebug` |
+| Public tunnel (free) | `cloudflared tunnel --url http://localhost:8000` |
 | Tests | `python -m pytest tests/ -q` |
 
 ## 20. Troubleshooting
@@ -245,19 +333,29 @@ python dashboard/app.py
 ## 21. Limitations
 
 See [`docs/portfolio.md#limitations`](docs/portfolio.md#limitations) for
-the full, honest list (dataset size, severity heuristic, zone boundaries
-unavailable, demo video provenance, CPU-only inference, no Android yet).
+the full, honest list — in short: a small (300-image) training dataset,
+a geometric (not learned) severity heuristic, zone-level GIS unavailable
+without a user-supplied boundary file, CPU-only inference, detection still
+running server-side rather than on-device, and a public URL that depends on
+this laptop staying on.
 
 ## 22. Future roadmap
 
 | Version | Scope |
 |---|---|
-| V1 (this repo) | Laptop video + GPS + ML + GIS + dashboard |
-| V2 | ONNX optimization, larger dataset/model sweep |
-| V3 | Android camera + GPS client |
-| V4 | Offline Android operation |
-| V5 | Cloud synchronization (`sync_queue` table already reserved) |
+| V1 (this repo) | Video/GPS pipeline + native Android capture + web capture + live dashboard |
+| V2 | ONNX optimization, larger dataset/model sweep, GPU training |
+| V3 | Fully on-device Android inference (ONNX Runtime Mobile) |
+| V4 | Offline-first Android operation with deferred sync |
+| V5 | Cloud synchronization across contributors (`sync_queue` table already reserved) |
 | V6 | Additional road-defect classes (cracks, waterlogging, debris) |
+
+## License
+
+Code is [MIT licensed](LICENSE). Bundled third-party data has its own
+license — see `data/bengaluru/README.md` (BBMP ward boundaries, CC BY-SA
+2.5 IN) and `ml/datasets/processed/dataset_info.json` (training dataset,
+CC BY 4.0).
 
 ---
 
