@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
@@ -18,6 +19,7 @@ import com.bari.app.capture.CaptureQueue
 import com.bari.app.capture.CaptureService
 import com.bari.app.capture.SessionMeta
 import com.bari.app.databinding.ActivityMainBinding
+import com.bari.app.detect.OnDeviceDetector
 import com.bari.app.net.ApiClient
 import com.bari.app.upload.DetectionEvents
 import com.bari.app.upload.UploadWorker
@@ -25,6 +27,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.util.Date
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : AppCompatActivity() {
 
@@ -32,12 +36,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var prefs: Prefs
     private var isRiding = false
 
-    // --- Live camera preview: binds to CaptureService only while riding
-    // and this activity is visible, so the preview never keeps the camera
-    // doing extra work in the background (capture itself is unaffected
-    // either way — see CaptureService.rebindCamera). ---
+    // --- Live camera preview + on-device detection overlay: only bound
+    // while riding and this activity is visible, so neither the preview nor
+    // the live inference does any work in the background (capture itself,
+    // and the record that actually gets saved, are entirely unaffected
+    // either way — see CaptureService.rebindCamera + core/mobile_ingest.py). ---
     private var captureService: CaptureService? = null
     private var serviceBound = false
+    private var onDeviceDetector: OnDeviceDetector? = null
+    private val detectionExecutor = Executors.newSingleThreadExecutor()
+    private val inferenceInFlight = AtomicBoolean(false)
+
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, service: IBinder) {
             val binder = service as CaptureService.LocalBinder
@@ -45,6 +54,7 @@ class MainActivity : AppCompatActivity() {
             serviceBound = true
             captureService?.attachPreview(binding.cameraPreview.surfaceProvider)
             binding.textPreviewHint.visibility = View.GONE
+            loadDetectorAndAttach()
         }
 
         override fun onServiceDisconnected(name: ComponentName) {
@@ -122,6 +132,11 @@ class MainActivity : AppCompatActivity() {
         refreshStatus()
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        detectionExecutor.shutdownNow()
+    }
+
     private fun bindToCaptureService() {
         if (serviceBound) return
         bindService(Intent(this, CaptureService::class.java), serviceConnection, Context.BIND_AUTO_CREATE)
@@ -129,11 +144,54 @@ class MainActivity : AppCompatActivity() {
 
     private fun unbindFromCaptureService() {
         if (!serviceBound) return
+        captureService?.detachLiveDetection()
         captureService?.detachPreview()
         unbindService(serviceConnection)
         serviceBound = false
         captureService = null
         binding.textPreviewHint.visibility = View.VISIBLE
+        binding.detectionOverlay.clear()
+        onDeviceDetector?.close()
+        onDeviceDetector = null
+    }
+
+    /** Loading the ONNX session touches disk/does real work, so it happens
+     * off the main thread; once ready, frames start flowing from
+     * CaptureService's camera into [onCameraFrame]. */
+    private fun loadDetectorAndAttach() {
+        detectionExecutor.execute {
+            val detector = try {
+                OnDeviceDetector(applicationContext)
+            } catch (e: Exception) {
+                null // live overlay just won't appear; capture/upload are unaffected
+            }
+            onDeviceDetector = detector
+            if (detector != null) {
+                captureService?.attachLiveDetection { bitmap -> onCameraFrame(bitmap) }
+            }
+        }
+    }
+
+    /** Throttled: on-device YOLO inference on a phone CPU takes real time
+     * (hundreds of ms), so this only ever processes one frame at a time and
+     * skips any frame that arrives while the previous one is still being
+     * analyzed — CaptureService's STRATEGY_KEEP_ONLY_LATEST already drops
+     * backlog at the camera level, this is the analysis-side half of that. */
+    private fun onCameraFrame(bitmap: Bitmap) {
+        if (!inferenceInFlight.compareAndSet(false, true)) return
+        detectionExecutor.execute {
+            try {
+                val detector = onDeviceDetector
+                if (detector == null) return@execute
+                val results = detector.detect(bitmap, confidenceThreshold = LIVE_CONFIDENCE_THRESHOLD)
+                runOnUiThread {
+                    binding.detectionOverlay.setFrameSize(bitmap.width, bitmap.height)
+                    binding.detectionOverlay.show(results)
+                }
+            } finally {
+                inferenceInFlight.set(false)
+            }
+        }
     }
 
     // --- Permissions ---
@@ -203,7 +261,7 @@ class MainActivity : AppCompatActivity() {
         prefs.isRiding = true
         binding.btnToggleRide.text = "Stop ride"
         binding.textLastDetection.text = "No detections yet this ride."
-        bindToCaptureService() // shows the live preview immediately, since we're visible right now
+        bindToCaptureService() // shows the live preview + detection overlay immediately, since we're visible right now
         refreshStatus()
 
         // Best-effort immediate sync attempt, purely for faster dashboard
@@ -251,5 +309,12 @@ class MainActivity : AppCompatActivity() {
             appendLine("  Camera + location: ${hasAllCorePermissions()}")
             appendLine("  Background location: ${hasBackgroundLocation()}")
         }
+    }
+
+    companion object {
+        /** Slightly more lenient than the server's CONFIDENCE_THRESHOLD
+         * (0.6) so the live overlay still feels responsive, while staying
+         * well above the old 0.35 that was flagging non-road objects. */
+        private const val LIVE_CONFIDENCE_THRESHOLD = 0.55f
     }
 }

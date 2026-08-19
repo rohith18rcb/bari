@@ -13,9 +13,12 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Looper
+import android.graphics.Bitmap
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.core.UseCase
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -56,6 +59,8 @@ class CaptureService : LifecycleService() {
     private var cameraProvider: ProcessCameraProvider? = null
     private var imageCapture: ImageCapture? = null
     private var preview: Preview? = null
+    private var imageAnalysis: ImageAnalysis? = null
+    private var onLiveFrame: ((Bitmap) -> Unit)? = null
     private lateinit var cameraExecutorThread: HandlerThread
     private lateinit var cameraExecutor: Handler
 
@@ -79,6 +84,39 @@ class CaptureService : LifecycleService() {
 
     fun detachPreview() {
         preview = null
+        rebindCamera()
+    }
+
+    /** Streams decoded RGBA bitmaps from the live camera feed to [onFrame],
+     * for on-device inference (see MainActivity + OnDeviceDetector). Only
+     * the latest frame is ever queued (STRATEGY_KEEP_ONLY_LATEST) — if
+     * inference is slower than the camera's frame rate, frames are dropped
+     * rather than backing up, which is exactly what a "live-ish" (not
+     * frame-perfect) overlay wants. */
+    fun attachLiveDetection(onFrame: (Bitmap) -> Unit) {
+        onLiveFrame = onFrame
+        imageAnalysis = ImageAnalysis.Builder()
+            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .build()
+            .also { analysis ->
+                analysis.setAnalyzer(Executor { command -> cameraExecutor.post(command) }) { imageProxy: ImageProxy ->
+                    try {
+                        onLiveFrame?.invoke(rgba8888ToBitmap(imageProxy))
+                    } catch (e: Exception) {
+                        // A single bad frame must never take capture/GPS down with it.
+                    } finally {
+                        imageProxy.close()
+                    }
+                }
+            }
+        rebindCamera()
+    }
+
+    fun detachLiveDetection() {
+        imageAnalysis?.clearAnalyzer()
+        imageAnalysis = null
+        onLiveFrame = null
         rebindCamera()
     }
 
@@ -189,9 +227,10 @@ class CaptureService : LifecycleService() {
     }
 
     /** (Re)binds whichever use cases currently apply — capture always,
-     * preview only while a MainActivity is bound and watching. Called both
-     * on initial setup and whenever [attachPreview]/[detachPreview] change
-     * what should be bound. Returns false if the bind failed. */
+     * preview/analysis only while a MainActivity is bound and watching.
+     * Called both on initial setup and whenever [attachPreview]/[detachPreview]
+     * or [attachLiveDetection]/[detachLiveDetection] change what should be
+     * bound. Returns false if the bind failed. */
     private fun rebindCamera(): Boolean {
         val provider = cameraProvider ?: return false
         val capture = imageCapture ?: return false
@@ -199,11 +238,26 @@ class CaptureService : LifecycleService() {
             provider.unbindAll()
             val useCases = mutableListOf<UseCase>(capture)
             preview?.let { useCases.add(it) }
+            imageAnalysis?.let { useCases.add(it) }
             provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, *useCases.toTypedArray())
             true
         } catch (e: Exception) {
             false
         }
+    }
+
+    /** Converts a single-plane RGBA_8888 ImageAnalysis frame (requested via
+     * ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888) directly into a Bitmap —
+     * that format's per-pixel byte layout (R,G,B,A) matches what
+     * Bitmap.Config.ARGB_8888 expects from copyPixelsFromBuffer. */
+    private fun rgba8888ToBitmap(image: ImageProxy): Bitmap {
+        val plane = image.planes[0]
+        val pixelStride = plane.pixelStride
+        val rowStride = plane.rowStride
+        val rowPadding = rowStride - pixelStride * image.width
+        val bitmap = Bitmap.createBitmap(image.width + rowPadding / pixelStride, image.height, Bitmap.Config.ARGB_8888)
+        bitmap.copyPixelsFromBuffer(plane.buffer)
+        return if (rowPadding == 0) bitmap else Bitmap.createBitmap(bitmap, 0, 0, image.width, image.height)
     }
 
     private fun mainExecutor() = androidx.core.content.ContextCompat.getMainExecutor(this)

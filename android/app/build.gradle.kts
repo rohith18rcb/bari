@@ -13,6 +13,15 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "0.1.0"
+
+        // ONNX Runtime ships large native libs per-ABI. arm64-v8a covers
+        // essentially every real phone since ~2017, which is what actually
+        // matters here (APK download size has been the real bottleneck) —
+        // bundling all 4 default ABIs nearly quadrupled the APK for no
+        // benefit. Add "x86_64" back temporarily if testing on an emulator.
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
     }
 
     buildTypes {
@@ -31,6 +40,10 @@ android {
 
     buildFeatures {
         viewBinding = true
+    }
+
+    androidResources {
+        noCompress += "onnx" // store the bundled model as-is, no point re-compressing it
     }
 }
 
@@ -60,6 +73,11 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-service:2.8.4")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+
+    // On-device inference for the live camera detection overlay (server-side
+    // detection, used for actually saved/uploaded records, is unaffected —
+    // this is purely for real-time visual feedback while riding).
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.19.2")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

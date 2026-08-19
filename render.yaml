@@ -17,7 +17,7 @@ services:
       - key: DEVICE
         value: cpu
       - key: CONFIDENCE_THRESHOLD
-        value: "0.35"
+        value: "0.6"
       - key: IOU_THRESHOLD
         value: "0.45"
       - key: MIN_TRACK_FRAMES

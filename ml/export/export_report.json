@@ -1,0 +1,10 @@
+{
+  "status": "EXECUTED",
+  "weights": "ml\\models\\pothole_yolo_best.pt",
+  "onnx_path": "ml\\models\\pothole_yolo_best.onnx",
+  "imgsz": 640,
+  "model_size_mb": {
+    "pytorch": 23.34,
+    "onnx": 11.7
+  }
+}
