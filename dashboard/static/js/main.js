@@ -153,14 +153,31 @@ async function openDetail(potholeId) {
       Delete this detection
     </button>
   `;
-  document.getElementById("btn-delete-detection").addEventListener("click", () => deleteDetection(d.pothole_id));
+  // A two-click in-page confirmation instead of window.confirm() — native
+  // dialogs are unreliable across mobile browsers/webviews (some suppress
+  // or auto-dismiss them silently, which made this button look broken).
+  let confirmPending = false;
+  const deleteBtn = document.getElementById("btn-delete-detection");
+  deleteBtn.addEventListener("click", () => {
+    if (!confirmPending) {
+      confirmPending = true;
+      deleteBtn.textContent = "Click again to confirm delete";
+      setTimeout(() => {
+        if (confirmPending) {
+          confirmPending = false;
+          deleteBtn.textContent = "Delete this detection";
+        }
+      }, 4000);
+      return;
+    }
+    deleteBtn.disabled = true;
+    deleteBtn.textContent = "Deleting…";
+    deleteDetection(d.pothole_id);
+  });
   document.getElementById("detail-modal").classList.remove("hidden");
 }
 
 async function deleteDetection(potholeId) {
-  if (!confirm(`Delete ${potholeId} permanently? This removes it (and its evidence photos) from the dashboard and can't be undone.`)) {
-    return;
-  }
   await fetch(`/api/detections/${potholeId}`, { method: "DELETE" });
   closeDetail();
   applyFilters();
