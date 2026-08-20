@@ -96,6 +96,30 @@ def api_detection_detail(pothole_id: str):
         return detection_to_dict(d)
 
 
+@app.delete("/api/detections/{pothole_id}")
+def api_delete_detection(pothole_id: str):
+    """Removes a detection — e.g. a false positive — from the database and
+    deletes its evidence images from disk. Irreversible; the dashboard
+    confirms with the user before calling this."""
+    evidence_root = settings.evidence_path.resolve()
+    with SessionLocal() as db:
+        d = crud.get_detection(db, pothole_id)
+        if d is None:
+            raise HTTPException(status_code=404, detail="Not found")
+        evidence_paths = [d.image_path, d.annotated_image_path, d.crop_image_path]
+        crud.delete_detection(db, pothole_id)
+        db.commit()
+
+    for path_str in evidence_paths:
+        if not path_str:
+            continue
+        path = Path(path_str).resolve()
+        if evidence_root in path.parents and path.exists():
+            path.unlink(missing_ok=True)
+
+    return {"deleted": pothole_id}
+
+
 @app.get("/api/evidence/{pothole_id}/{kind}")
 def api_evidence(pothole_id: str, kind: str):
     if kind not in EVIDENCE_KINDS:

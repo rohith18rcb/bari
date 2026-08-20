@@ -149,8 +149,21 @@ async function openDetail(potholeId) {
       <div>Duplicate status</div><div>${d.duplicate_status}${d.duplicate_of ? ` (of ${d.duplicate_of})` : ""}</div>
       <div>Session</div><div>${d.session_id}</div>
     </div>
+    <button id="btn-delete-detection" class="btn" style="margin-top:14px;background:var(--high);color:#250000;">
+      Delete this detection
+    </button>
   `;
+  document.getElementById("btn-delete-detection").addEventListener("click", () => deleteDetection(d.pothole_id));
   document.getElementById("detail-modal").classList.remove("hidden");
+}
+
+async function deleteDetection(potholeId) {
+  if (!confirm(`Delete ${potholeId} permanently? This removes it (and its evidence photos) from the dashboard and can't be undone.`)) {
+    return;
+  }
+  await fetch(`/api/detections/${potholeId}`, { method: "DELETE" });
+  closeDetail();
+  applyFilters();
 }
 
 function closeDetail() {

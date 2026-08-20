@@ -112,7 +112,36 @@ class MainActivity : AppCompatActivity() {
         binding.btnToggleRide.setOnClickListener { onToggleRide() }
         binding.btnUploadNow.setOnClickListener { onUploadNow() }
 
+        observeUploadProgress()
         refreshStatus()
+    }
+
+    /** Shows "N of M uploaded" + a progress bar while UploadWorker is
+     * actively running (see UploadWorker.setProgress) — reflects real
+     * progress even if this activity was reopened mid-upload, since
+     * WorkManager's own state survives that. */
+    private fun observeUploadProgress() {
+        val workManager = androidx.work.WorkManager.getInstance(this)
+        for (name in UploadWorker.observableWorkNames()) {
+            workManager.getWorkInfosForUniqueWorkLiveData(name).observe(this) { infos ->
+                val running = infos.firstOrNull { it.state == androidx.work.WorkInfo.State.RUNNING }
+                if (running != null) {
+                    val uploaded = running.progress.getInt(UploadWorker.PROGRESS_UPLOADED, 0)
+                    val total = running.progress.getInt(UploadWorker.PROGRESS_TOTAL, 0)
+                    if (total > 0) {
+                        binding.uploadProgressBar.visibility = View.VISIBLE
+                        binding.uploadProgressBar.max = total
+                        binding.uploadProgressBar.progress = uploaded
+                        binding.textUploadProgress.visibility = View.VISIBLE
+                        binding.textUploadProgress.text = "Uploading: $uploaded of $total photos"
+                    }
+                } else {
+                    binding.uploadProgressBar.visibility = View.GONE
+                    binding.textUploadProgress.visibility = View.GONE
+                    refreshStatus() // an upload just finished — pending counts changed
+                }
+            }
+        }
     }
 
     override fun onStart() {

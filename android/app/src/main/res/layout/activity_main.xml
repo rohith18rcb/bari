@@ -103,8 +103,26 @@
             android:id="@+id/btnUploadNow"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="20dp"
+            android:layout_marginBottom="8dp"
             android:text="Upload pending now" />
+
+        <ProgressBar
+            android:id="@+id/uploadProgressBar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:max="100"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/textUploadProgress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="20dp"
+            android:textColor="@color/text_dim"
+            android:textSize="12sp"
+            android:visibility="gone" />
 
         <TextView
             android:layout_width="wrap_content"

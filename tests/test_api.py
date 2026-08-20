@@ -94,3 +94,18 @@ def test_export_json_endpoint(client):
 def test_evidence_endpoint_404_when_no_image(client):
     resp = client.get("/api/evidence/PTH-000001/original")
     assert resp.status_code == 404
+
+
+def test_delete_detection_removes_it(client):
+    resp = client.delete("/api/detections/PTH-000001")
+    assert resp.status_code == 200
+    assert resp.json()["deleted"] == "PTH-000001"
+
+    # Gone from both the detail endpoint and the list
+    assert client.get("/api/detections/PTH-000001").status_code == 404
+    assert client.get("/api/detections").json() == []
+
+
+def test_delete_detection_404_for_unknown_id(client):
+    resp = client.delete("/api/detections/PTH-999999")
+    assert resp.status_code == 404

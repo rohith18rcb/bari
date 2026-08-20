@@ -151,6 +151,19 @@ def get_detection(db: DBSession, pothole_id: str) -> Optional[Detection]:
     return db.execute(select(Detection).where(Detection.pothole_id == pothole_id)).scalar_one_or_none()
 
 
+def delete_detection(db: DBSession, pothole_id: str) -> bool:
+    """Removes a detection record — e.g. a false positive (mislabeled
+    non-pothole) the user wants cleaned out of the dashboard/exports.
+    Does not touch evidence image files; the caller (dashboard/app.py)
+    deletes those separately since that's a filesystem concern, not a DB one.
+    Returns False if the id didn't exist (nothing to delete)."""
+    record = get_detection(db, pothole_id)
+    if record is None:
+        return False
+    db.delete(record)
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Stats
 # ---------------------------------------------------------------------------

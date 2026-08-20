@@ -219,8 +219,23 @@ class CaptureService : LifecycleService() {
         val future = ProcessCameraProvider.getInstance(this)
         future.addListener({
             cameraProvider = future.get()
+            // Full sensor resolution (often 12MP+) is pure waste here: the
+            // detector's own input is 640x640, and every extra pixel is
+            // extra upload bandwidth over what's often a slow/metered
+            // connection. ~1280x960 is comfortably more detail than the
+            // model uses while cutting typical JPEG size by 5-10x.
+            val resolutionSelector = androidx.camera.core.resolutionselector.ResolutionSelector.Builder()
+                .setResolutionStrategy(
+                    androidx.camera.core.resolutionselector.ResolutionStrategy(
+                        android.util.Size(1280, 960),
+                        androidx.camera.core.resolutionselector.ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER,
+                    ),
+                )
+                .build()
             imageCapture = ImageCapture.Builder()
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                .setResolutionSelector(resolutionSelector)
+                .setJpegQuality(80)
                 .build()
             if (!rebindCamera()) stopSelf() // initial bind failing is fatal — no capture is possible at all
         }, mainExecutor())
